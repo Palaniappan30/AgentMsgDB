@@ -356,6 +356,7 @@
       const agentSendButton = document.getElementById('agentSendButton');
 
       let userMsgCount = 0;
+      let guestMessages = {};
 
       function formatTime() {
         const now = new Date();
@@ -387,11 +388,41 @@
         container.scrollTop = container.scrollHeight;
       }
 
+      function displayUserMessagesInAgent() {
+        agentChatMessages.innerHTML = '';
+        for (let i = 1; i <= userMsgCount; i++) {
+          const messageKey = `msg${i}`;
+          if (guestMessages[messageKey]) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message guest';
+
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            textDiv.textContent = guestMessages[messageKey];
+
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'message-time';
+            timeSpan.textContent = formatTime();
+
+            bubbleDiv.appendChild(textDiv);
+            bubbleDiv.appendChild(timeSpan);
+            messageDiv.appendChild(bubbleDiv);
+            agentChatMessages.appendChild(messageDiv);
+          }
+        }
+        agentChatMessages.scrollTop = agentChatMessages.scrollHeight;
+      }
+
       async function saveUserMessage(text) {
         try {
           userMsgCount++;
           const userMsgsRef = ref(database, `GuestMsgs/msg${userMsgCount}`);
           await set(userMsgsRef, text);
+          guestMessages[`msg${userMsgCount}`] = text;
+          displayUserMessagesInAgent();
         } catch (error) {
           console.error('Error saving message:', error);
         }
@@ -432,6 +463,14 @@
 
       agentMessageInput.disabled = false;
       agentSendButton.disabled = false;
+
+      const guestMsgsRef = ref(database, 'GuestMsgs');
+      onValue(guestMsgsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          guestMessages = data;
+        }
+      });
     </script>
   </body>
 </html>
