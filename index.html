@@ -13,21 +13,19 @@
 
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #f0f0f0;
         height: 100vh;
         display: flex;
-        justify-content: center;
-        align-items: center;
         padding: 20px;
+        gap: 20px;
       }
 
       .chat-container {
-        width: 100%;
-        max-width: 600px;
-        height: 90vh;
+        flex: 1;
+        height: 100%;
         background: #f5f5f5;
         border-radius: 12px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -38,6 +36,10 @@
         color: white;
         padding: 16px 20px;
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .chat-header.user-header {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
       }
 
       .header-content {
@@ -179,6 +181,10 @@
         transition: transform 0.2s, box-shadow 0.2s;
       }
 
+      .send-button.user-send {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      }
+
       .send-button:hover:not(:disabled) {
         transform: scale(1.05);
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
@@ -246,6 +252,46 @@
     </style>
   </head>
   <body>
+    <!-- User Chat on Left -->
+    <div class="chat-container">
+      <div class="chat-header user-header">
+        <div class="header-content">
+          <div class="avatar">U</div>
+          <div class="header-info">
+            <h2>User</h2>
+            <span class="status">Active</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-messages" id="userChatMessages"></div>
+
+      <div class="chat-input-container">
+        <input
+          type="text"
+          id="userMessageInput"
+          class="chat-input"
+          placeholder="Type a message..."
+        />
+        <button id="userSendButton" class="send-button user-send">
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Agent Chat on Right -->
     <div class="chat-container">
       <div class="chat-header">
         <div class="header-content">
@@ -257,17 +303,17 @@
         </div>
       </div>
 
-      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-messages" id="agentChatMessages"></div>
 
       <div class="chat-input-container">
         <input
           type="text"
-          id="messageInput"
+          id="agentMessageInput"
           class="chat-input"
           placeholder="Type a message..."
           disabled
         />
-        <button id="sendButton" class="send-button" disabled>
+        <button id="agentSendButton" class="send-button" disabled>
           <svg
             width="24"
             height="24"
@@ -287,7 +333,7 @@
 
     <script type="module">
       import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-      import { getDatabase, ref, onValue } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+      import { getDatabase, ref, set, push, onValue } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
       const firebaseConfig = {
         apiKey: "AIzaSyBWWD5Uj6PwQQMPTVMaKcIJ7J1XtF_ZvkQ",
@@ -302,14 +348,16 @@
       const app = initializeApp(firebaseConfig);
       const database = getDatabase(app);
 
-      const chatMessages = document.getElementById('chatMessages');
-      const messageInput = document.getElementById('messageInput');
-      const sendButton = document.getElementById('sendButton');
+      const userChatMessages = document.getElementById('userChatMessages');
+      const agentChatMessages = document.getElementById('agentChatMessages');
+      const userMessageInput = document.getElementById('userMessageInput');
+      const userSendButton = document.getElementById('userSendButton');
+      const agentMessageInput = document.getElementById('agentMessageInput');
+      const agentSendButton = document.getElementById('agentSendButton');
 
+      let userMessages = [];
+      let agentMessages = {};
       let currentMessageIndex = 1;
-      let guestMessages = {};
-      let isWaitingForUser = true;
-      let chatStarted = false;
 
       function formatTime() {
         const now = new Date();
@@ -318,9 +366,9 @@
         return `${hours}:${minutes}`;
       }
 
-      function addMessage(text, sender) {
+      function addMessage(container, text, sender) {
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${sender}`;
+        messageDiv.className = `message ${sender === 'user' ? 'guest' : 'agent'}`;
 
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'message-bubble';
@@ -336,15 +384,15 @@
         bubbleDiv.appendChild(textDiv);
         bubbleDiv.appendChild(timeSpan);
         messageDiv.appendChild(bubbleDiv);
-        chatMessages.appendChild(messageDiv);
+        container.appendChild(messageDiv);
 
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        container.scrollTop = container.scrollHeight;
       }
 
-      function showTypingIndicator() {
+      function showTypingIndicator(container) {
         const typingDiv = document.createElement('div');
         typingDiv.className = 'message agent';
-        typingDiv.id = 'typingIndicator';
+        typingDiv.id = 'agentTypingIndicator';
 
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'message-bubble';
@@ -359,13 +407,13 @@
 
         bubbleDiv.appendChild(typingContent);
         typingDiv.appendChild(bubbleDiv);
-        chatMessages.appendChild(typingDiv);
+        container.appendChild(typingDiv);
 
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        container.scrollTop = container.scrollHeight;
       }
 
       function removeTypingIndicator() {
-        const typingIndicator = document.getElementById('typingIndicator');
+        const typingIndicator = document.getElementById('agentTypingIndicator');
         if (typingIndicator) {
           typingIndicator.remove();
         }
@@ -373,51 +421,50 @@
 
       function displayNextAgentMessage() {
         const messageKey = `msg${currentMessageIndex}`;
-        const messageText = guestMessages[messageKey];
+        const messageText = agentMessages[messageKey];
 
         if (messageText) {
-          showTypingIndicator();
+          showTypingIndicator(agentChatMessages);
 
           setTimeout(() => {
             removeTypingIndicator();
-            addMessage(messageText, 'agent');
-
-            isWaitingForUser = true;
-            messageInput.disabled = false;
-            sendButton.disabled = false;
-            messageInput.focus();
+            addMessage(agentChatMessages, messageText, 'agent');
           }, 1500);
-        } else {
-          messageInput.disabled = true;
-          sendButton.disabled = true;
-          messageInput.placeholder = "No more messages...";
         }
       }
 
-      function handleSendMessage() {
-        const text = messageInput.value.trim();
+      async function saveUserMessage(text) {
+        try {
+          const userMsgsRef = ref(database, 'UserMsgs');
+          await push(userMsgsRef, {
+            message: text,
+            timestamp: new Date().toISOString()
+          });
+        } catch (error) {
+          console.error('Error saving message:', error);
+        }
+      }
 
-        if (text && isWaitingForUser) {
-          addMessage(text, 'guest');
-          messageInput.value = '';
+      function handleUserSendMessage() {
+        const text = userMessageInput.value.trim();
 
-          messageInput.disabled = true;
-          sendButton.disabled = true;
-          isWaitingForUser = false;
+        if (text) {
+          addMessage(userChatMessages, text, 'user');
+          userMessageInput.value = '';
+          saveUserMessage(text);
 
           currentMessageIndex++;
-
           setTimeout(() => {
             displayNextAgentMessage();
           }, 500);
         }
       }
 
-      sendButton.addEventListener('click', handleSendMessage);
+      userSendButton.addEventListener('click', handleUserSendMessage);
 
-      messageInput.addEventListener('keypress', (e) => {
+      userMessageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-          handleSendMessage();
+          handleUserSendMessage();
         }
       });
 
@@ -425,14 +472,7 @@
       onValue(guestMsgsRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
-          guestMessages = data;
-
-          if (!chatStarted && Object.keys(guestMessages).length > 0) {
-            chatStarted = true;
-            messageInput.disabled = false;
-            sendButton.disabled = false;
-            messageInput.focus();
-          }
+          agentMessages = data;
         }
       });
     </script>
