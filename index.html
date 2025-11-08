@@ -355,9 +355,7 @@
       const agentMessageInput = document.getElementById('agentMessageInput');
       const agentSendButton = document.getElementById('agentSendButton');
 
-      let userMessages = [];
-      let agentMessages = {};
-      let currentMessageIndex = 1;
+      let userMsgCount = 0;
 
       function formatTime() {
         const now = new Date();
@@ -389,57 +387,11 @@
         container.scrollTop = container.scrollHeight;
       }
 
-      function showTypingIndicator(container) {
-        const typingDiv = document.createElement('div');
-        typingDiv.className = 'message agent';
-        typingDiv.id = 'agentTypingIndicator';
-
-        const bubbleDiv = document.createElement('div');
-        bubbleDiv.className = 'message-bubble';
-
-        const typingContent = document.createElement('div');
-        typingContent.className = 'typing-indicator';
-        typingContent.innerHTML = `
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-        `;
-
-        bubbleDiv.appendChild(typingContent);
-        typingDiv.appendChild(bubbleDiv);
-        container.appendChild(typingDiv);
-
-        container.scrollTop = container.scrollHeight;
-      }
-
-      function removeTypingIndicator() {
-        const typingIndicator = document.getElementById('agentTypingIndicator');
-        if (typingIndicator) {
-          typingIndicator.remove();
-        }
-      }
-
-      function displayNextAgentMessage() {
-        const messageKey = `msg${currentMessageIndex}`;
-        const messageText = agentMessages[messageKey];
-
-        if (messageText) {
-          showTypingIndicator(agentChatMessages);
-
-          setTimeout(() => {
-            removeTypingIndicator();
-            addMessage(agentChatMessages, messageText, 'agent');
-          }, 1500);
-        }
-      }
-
       async function saveUserMessage(text) {
         try {
-          const userMsgsRef = ref(database, 'UserMsgs');
-          await push(userMsgsRef, {
-            message: text,
-            timestamp: new Date().toISOString()
-          });
+          userMsgCount++;
+          const userMsgsRef = ref(database, `GuestMsgs/msg${userMsgCount}`);
+          await set(userMsgsRef, text);
         } catch (error) {
           console.error('Error saving message:', error);
         }
@@ -452,29 +404,34 @@
           addMessage(userChatMessages, text, 'user');
           userMessageInput.value = '';
           saveUserMessage(text);
+        }
+      }
 
-          currentMessageIndex++;
-          setTimeout(() => {
-            displayNextAgentMessage();
-          }, 500);
+      function handleAgentSendMessage() {
+        const text = agentMessageInput.value.trim();
+
+        if (text) {
+          addMessage(agentChatMessages, text, 'agent');
+          agentMessageInput.value = '';
         }
       }
 
       userSendButton.addEventListener('click', handleUserSendMessage);
-
       userMessageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
           handleUserSendMessage();
         }
       });
 
-      const guestMsgsRef = ref(database, 'GuestMsgs');
-      onValue(guestMsgsRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          agentMessages = data;
+      agentSendButton.addEventListener('click', handleAgentSendMessage);
+      agentMessageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          handleAgentSendMessage();
         }
       });
+
+      agentMessageInput.disabled = false;
+      agentSendButton.disabled = false;
     </script>
   </body>
 </html>
